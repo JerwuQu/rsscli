@@ -26,43 +26,35 @@ parse_feed() { # < data
 	return 1
 }
 
-update_read_urls() { # feedhash < urls
-	set -e
+update_read_urls() { # urlhash < urls
 	readfile="$DATA_DIR/$1.read"
-
 	if [ -f "$readfile" ]; then
-		merged_urls=$(cat - "$readfile" | sort -u)
-		new_urls=$(echo "$merged_urls" | comm -13 "$readfile" -)
+		new_urls=$(cat - "$readfile" | sort -u | comm -13 "$readfile" -)
 		[ -z "$new_urls" ] || {
-			echo "$new_urls"
-			echo "$merged_urls" > "$readfile"
+			echo "$new_urls" | tee -a "$readfile"
+			sort -u "$readfile" -o "$readfile"
 		}
 	else
-		new_urls=$(sort -u)
-		echo "$new_urls" | tee "$readfile"
+		sort -u | tee "$readfile"
 	fi
 }
 
-fetch_unread() { # feedurl
-	set -e
-	feedurl=$1
-	data=$(curl -fsL "$feedurl")
-	feedhash=$(echo "$feedurl" | sha1sum | cut -d ' ' -f 1)
-	items=$(echo "$data" | parse_feed)
-
+fetch_unread() { # urlhash < data
 	# A little dirty, could possibly be improved with awk
-	unread_urls=$(echo "$items" | cut -f 3 | update_read_urls "$feedhash")
+	items=$(parse_feed)
+	unread_urls=$(echo "$items" | cut -f 3 | update_read_urls "$1")
 	[ -z "$unread_urls" ] || echo "$items" | grep "$unread_urls"
 }
 
 usage() {
 	printf 'rsscli.sh
 USAGE:
-	add <name> <url>
-	del <name>
-	feeds
-	run
-	purge-read
+	add <name> <url>  -  add a new feed
+	del <name>        -  remove a feed
+	run               -  fetch all feeds and output updates
+	feeds             -  print all feed titles and urls to output
+	format-feeds      -  format feeds file, required after doing manual edits
+	purge-history     -  purge feed read history
 '
 	exit 1
 }
@@ -70,26 +62,38 @@ USAGE:
 case $1 in
 	add)
 		[ -z "$3" ] && usage
-		printf '%s\t%s\n' "$2" "$3" >> "$FEEDS_FILE"
-		sort -u "$FEEDS_FILE" -o "$FEEDS_FILE"
+		printf '%s\t%s\n' "$2" "$3"  >> "$FEEDS_FILE"
+		"$0" format-feeds
 		;;
 	del)
 		[ -z "$2" ] && usage
 		newfile=$(grep -v "$2$TAB" "$FEEDS_FILE")
 		echo "$newfile" > "$FEEDS_FILE"
 		;;
-	feeds)
-		cat "$FEEDS_FILE"
-		;;
 	run)
 		while read -r line; do
+			printf 'url="%s"\noutput="/tmp/rsscli-feed-%s"\n\n' "$(echo "$line" | cut -f 2)" "$(echo "$line" | cut -f 3)"
+		done < "$FEEDS_FILE" | curl -LZK -
+		while read -r line; do
 			echo "$line" | cut -f 1 1>&2
-			unread=$(fetch_unread "$(echo "$line" | cut -f 2-)") || continue
-			[ -n "$unread" ] && printf "%s\n%s\n\n" "$(echo "$line" | cut -f 1)" "$unread"
+			urlhash=$(echo "$line" | cut -f 3)
+			unread=$(fetch_unread "$urlhash" < "/tmp/rsscli-feed-$urlhash") || continue
+			[ -z "$unread" ] || printf "%s\n%s\n\n" "$(echo "$line" | cut -f 1)" "$unread"
 		done < "$FEEDS_FILE"
-		exit 0
 		;;
-	purge-read)
+	feeds)
+		cut -f 1-2 < "$FEEDS_FILE"
+		;;
+	format-feeds)
+		feeds=$(while read -r line; do
+			title=$(echo "$line" | cut -f 1)
+			url=$(echo "$line" | cut -f 2)
+			urlhash=$(echo "$url" | sha1sum | cut -d ' ' -f 1)
+			printf '%s\t%s\t%s\n' "$title" "$url" "$urlhash"
+		done < "$FEEDS_FILE")
+		echo "$feeds" | sort -ufo "$FEEDS_FILE"
+		;;
+	purge-history)
 		rm "$DATA_DIR"/*.read
 		;;
 	help|*)
