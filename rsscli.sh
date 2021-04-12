@@ -82,10 +82,9 @@ case $1 in
 		cat "$FEEDS_FILE"
 		;;
 	run)
-		# TODO: parallel
 		while read -r line; do
-			echo 1>&2 "$(echo "$line" | cut -f 1)"
-			unread=$(fetch_unread "$(echo "$line" | cut -f 2-)")
+			echo "$line" | cut -f 1 1>&2
+			unread=$(fetch_unread "$(echo "$line" | cut -f 2-)") || continue
 			[ -n "$unread" ] && printf "%s\n%s\n\n" "$(echo "$line" | cut -f 1)" "$unread"
 		done < "$FEEDS_FILE"
 		exit 0
