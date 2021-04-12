@@ -73,12 +73,13 @@ case $1 in
 	run)
 		while read -r line; do
 			printf 'url="%s"\noutput="/tmp/rsscli-feed-%s"\n\n' "$(echo "$line" | cut -f 2)" "$(echo "$line" | cut -f 3)"
-		done < "$FEEDS_FILE" | curl -LZK -
+		done < "$FEEDS_FILE" | curl --parallel-max 5 -LZK -
 		while read -r line; do
-			echo "$line" | cut -f 1 1>&2
+			title=$(echo "$line" | cut -f 1)
+			echo "$title" 1>&2
 			urlhash=$(echo "$line" | cut -f 3)
 			unread=$(fetch_unread "$urlhash" < "/tmp/rsscli-feed-$urlhash") || continue
-			[ -z "$unread" ] || printf "%s\n%s\n\n" "$(echo "$line" | cut -f 1)" "$unread"
+			[ -z "$unread" ] || printf "%s\n%s\n\n" "$title" "$unread"
 		done < "$FEEDS_FILE"
 		;;
 	feeds)
