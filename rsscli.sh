@@ -73,7 +73,7 @@ case $1 in
 	run)
 		while read -r line; do
 			printf 'url="%s"\noutput="/tmp/rsscli-feed-%s"\n\n' "$(echo "$line" | cut -f 2)" "$(echo "$line" | cut -f 3)"
-		done < "$FEEDS_FILE" | curl --parallel-max 5 -LZK -
+		done < "$FEEDS_FILE" | curl --parallel-max 5 -m 20 -LZK - || true
 		while read -r line; do
 			title=$(echo "$line" | cut -f 1)
 			echo "$title" 1>&2
